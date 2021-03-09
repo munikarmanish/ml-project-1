@@ -24,21 +24,26 @@ class LogisticRegressionClassifier:
     the performance metric and batch gradient descent as the optimizer.
     """
 
-    def __init__(self, learning_rate=0.0001):
+    def features(self, X):
         """
-        Set some initial model parameters.
+        Get all input features (including the constant/bias input).
         """
-        self.learning_rate = learning_rate
+        X = np.array(X)
+        # add the bias term
+        if X.ndim == 1:
+            return np.hstack([1, X])
+        return np.hstack([np.ones((X.shape[0], 1)), X])
 
-    def fit(self, X, y, epochs=1000, debug=False):
+    def fit(self, X, y, learning_rate=0.001, epochs=1000, debug=False):
         """
         Train the model on the given dataset. Initialize weights from a random
         distribution if not already initialized.
 
         Args:
-            X:      training inputs
-            y:      training target labels
-            epochs: number of times to iterate over the whole training set
+            X:  training inputs
+            y:  training target labels
+            learning_rate:  the learning rate
+            epochs:  number of times to iterate over the whole training set
             debug:  if true, will print training errors
         """
         # check arguments
@@ -47,11 +52,12 @@ class LogisticRegressionClassifier:
         assert y.ndim == 1
         assert X.shape[0] == y.shape[0]
 
+        X = self.features(X)
         self.n = X.shape[1]  # number of features
 
         # randomly initialize weights
         if not hasattr(self, 'weights'):
-            self.weights = np.random.random(self.n)*0.02 - 0.01
+            self.weights = np.random.random(self.n) * 0.2 - 0.1
 
         # start the training
         for epoch in range(epochs):
@@ -59,9 +65,9 @@ class LogisticRegressionClassifier:
             h = self.h(X)
 
             # weight update
-            self.weights += self.learning_rate * np.matmul(y-h, X)
+            self.weights += learning_rate * ((y-h) @ X)
 
-            # evaluate
+            # print error for debugging
             if debug:
                 print(self.evaluate(X, y))
 
@@ -76,7 +82,13 @@ class LogisticRegressionClassifier:
         Returns:
             the probability of `x` belonging to class 1
         """
-        x = np.array(x)
+        # check if the model has weights
+        assert hasattr(self, "weights"), "model is not trained"
+
+        # add the bias term
+        if x.shape[-1] < self.n:
+            x = self.features(x)
+
         return sigmoid(np.matmul(self.weights, x.T))
 
     def evaluate(self, X, y):
@@ -88,12 +100,12 @@ class LogisticRegressionClassifier:
             y:  training target labels
 
         Returns:
-            Maximum likelihood of the model parameters, given the dataset
+            log likelihood of the model parameters, given the dataset
         """
         h = self.h(X)
-        log = np.log(h.clip(min=0.0000001))
-        log_ = np.log((1-h).clip(min=0.0000001))
-        return np.sum(np.dot(y, log) + np.dot(1-y, log_))
+        log = np.log(h.clip(min=0.00000001))
+        log_ = np.log((1-h).clip(min=0.00000001))
+        return np.mean(-y*log - (1-y)*log_)
 
 
 if __name__ == "__main__":
@@ -103,9 +115,12 @@ if __name__ == "__main__":
     Xtrain, ytrain = Dtrain[:, :3], Dtrain[:, 3]
     Xtest, ytest = Dtest[:, :3], Dtest[:, 3]
 
-    # train the model
-    model = LogisticRegressionClassifier(learning_rate=0.0001)
-    model.fit(Xtrain, ytrain, epochs=2000)
+    # train the model (decrease learning rate after every 100 epochs)
+    model = LogisticRegressionClassifier()
+    alpha = 0.0001
+    for i in range(10):
+        model.fit(Xtrain, ytrain, epochs=100, learning_rate=alpha)
+        alpha /= 5
 
     # get the predicted classes for the test set
     for x in Xtest.astype(int):
